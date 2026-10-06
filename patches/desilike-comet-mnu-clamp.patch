@@ -1,0 +1,63 @@
+diff --git a/desilike/theories/galaxy_clustering/full_shape.py b/desilike/theories/galaxy_clustering/full_shape.py
+index 751d115..f09997e 100644
+--- a/desilike/theories/galaxy_clustering/full_shape.py
++++ b/desilike/theories/galaxy_clustering/full_shape.py
+@@ -4106,11 +4106,21 @@ def _comet_growth_rate(cosmo_base, z, xp=None):
+     return xp.squeeze(cosmo_base.growth_rate(z))
+ 
+ 
+-def _cosmo_to_comet(cosmo):
++def _cosmo_to_comet(cosmo, xp=None):
++    """Map desilike cosmological parameters to comet's names and units.
++
++    With *xp* (the per-evaluation paths), ``Mnu`` is clamped at 0: samplers evaluate the
++    posterior under ``jit(vmap(...))``, so proposals below the prior (``m_ncdm < 0``) still
++    reach comet's background/growth code, where a negative neutrino density is NaN -- an
++    Equinox "linear solver received non-finite input" error, or NaN gradients if that is
++    turned off.  The prior gives those points ``-inf`` anyway, so the clamp changes nothing
++    inside it; it only keeps the masked evaluation finite."""
+     comet_cosmo = {}
+     for comet_name, name in _CONVERSION_COMET.items():
+         comet_cosmo[comet_name] = cosmo[name]
+     comet_cosmo['As'] *= 1e9  # comet uses As in units of 1e-9
++    if xp is not None:
++        comet_cosmo['Mnu'] = xp.maximum(comet_cosmo['Mnu'], 0.)
+     return comet_cosmo
+ 
+ 
+@@ -4289,7 +4299,7 @@ class COMETPTSpectrum2Poles(Calculator):
+         _use_jax = (self._backend == 'jax')
+         xp = jnp if _use_jax else np
+         _wrap = jnp.asarray if _use_jax else float
+-        params = {k: _wrap(v) for k, v in _cosmo_to_comet(self.cosmo).items()}
++        params = {k: _wrap(v) for k, v in _cosmo_to_comet(self.cosmo, xp=xp).items()}
+         params['z'] = float(self.z)
+         avir = self.avir.value if 'VDG' in self._model else None
+         md = self._md
+@@ -4653,7 +4663,7 @@ class COMETTracerSpectrum2Poles(Calculator):
+         _use_jax = (self._backend == 'jax')
+         xp = jnp if _use_jax else np
+         _wrap = jnp.asarray if _use_jax else np.asarray
+-        cosmo_params = {k: _wrap(v) for k, v in _cosmo_to_comet(self.cosmo).items()}
++        cosmo_params = {k: _wrap(v) for k, v in _cosmo_to_comet(self.cosmo, xp=xp).items()}
+         cosmo_params['z'] = float(self.z)
+         avir = self.avir.value if 'VDG' in self._model else None
+         md = self._md
+@@ -4915,7 +4925,7 @@ class COMETPTSpectrum3Poles(Calculator):
+         _use_jax = (self._backend == 'jax')
+         xp = jnp if _use_jax else np
+         _wrap = jnp.asarray if _use_jax else float
+-        params = {k: _wrap(v) for k, v in _cosmo_to_comet(self.cosmo).items()}
++        params = {k: _wrap(v) for k, v in _cosmo_to_comet(self.cosmo, xp=xp).items()}
+         params['z'] = float(self.z)
+         avir = self.avir.value if 'VDG' in self._model else None
+         # cnloB is currently always 0 for this estimator (see comet.bell's module
+@@ -5117,7 +5127,7 @@ class COMETTracerSpectrum3Poles(Calculator):
+         _use_jax = (self._backend == 'jax')
+         xp = jnp if _use_jax else np
+         _wrap = jnp.asarray if _use_jax else np.asarray
+-        cosmo_params = {k: _wrap(v) for k, v in _cosmo_to_comet(self.cosmo).items()}
++        cosmo_params = {k: _wrap(v) for k, v in _cosmo_to_comet(self.cosmo, xp=xp).items()}
+         avir = self.avir.value if 'VDG' in self._model else None
+         # cnloB is currently always 0 for this estimator -- see COMETPTSpectrum3Poles.__call__'s comment.
+         md = self._md
