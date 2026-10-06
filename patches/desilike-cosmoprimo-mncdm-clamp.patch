@@ -1,0 +1,21 @@
+diff --git a/desilike/theories/primordial_cosmology.py b/desilike/theories/primordial_cosmology.py
+index df15926..2628cd6 100644
+--- a/desilike/theories/primordial_cosmology.py
++++ b/desilike/theories/primordial_cosmology.py
+@@ -888,7 +888,15 @@ class CosmoprimoCosmology(PrimordialCosmology):
+             # JAX-native: tracers survive end-to-end (no pure_callback boundary), so
+             # cosmoprimo's own exception_or_nan already raises in eager / NaNs under
+             # jax.jit-grad-vmap tracing without any extra handling needed here.
+-            self._cosmo = _build_cosmoprimo(self._fiducial, params, lensing=lensing,
++            build_params = params
++            if 'm_ncdm' in params:
++                # Samplers evaluate points outside the prior too (emcee's stretch move reaches
++                # 2 * low - high), and cosmoprimo's positivity check turns m_ncdm < 0 into NaN
++                # under tracing, which then reaches equinox/lineax solves downstream (e.g. comet)
++                # and raises unless EQX_ON_ERROR=nan.  Those points carry -inf from the prior,
++                # so building them at m_ncdm = 0 changes no in-prior value.
++                build_params = dict(params, m_ncdm=jnp.maximum(params['m_ncdm'], 0.))
++            self._cosmo = _build_cosmoprimo(self._fiducial, build_params, lensing=lensing,
+                                             calc_params=calc_params, extra_params=extra_params)
+             self._run_requirements(params)
+             if self._engine_clips:
